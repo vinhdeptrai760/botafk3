@@ -1,3 +1,15 @@
+const express = require('express');
+const app = express();
+
+app.get('/', (req, res) => {
+    res.send('Bot Mineflayer đang sống nhăn răng 24/7!');
+});
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+    console.log(`Web server ảo đã bật trên port ${port}`);
+});
+///
 const mineflayer = require('mineflayer');
 const readline = require('readline');
 const { Vec3 } = require('vec3');
