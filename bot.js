@@ -25,7 +25,8 @@ const bot = mineflayer.createBot({
     port: 25565,
     auth: 'microsoft', // Đổi thành 'offline' nếu server là crack
     username: 'letrungvinhv2@outlook.com', // Đổi thành tên nhân vật nếu dùng 'offline'
-    version: '1.21.1'
+    version: '1.21.1',
+    profilesFolder: './'
 });
 
 bot.loadPlugin(pathfinder);
