@@ -1,3 +1,6 @@
+// ==========================================
+// 1. WEB SERVER ẢO (GIỮ RENDER ONLINE)
+// ==========================================
 const express = require('express');
 const app = express();
 
@@ -7,9 +10,12 @@ app.get('/', (req, res) => {
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-    console.log(`Web server ảo đã bật trên port ${port}`);
+    console.log(`[Web Server] Đã bật web ảo trên port ${port}`);
 });
-///
+
+// ==========================================
+// 2. KHAI BÁO THƯ VIỆN & BIẾN TOÀN CỤC
+// ==========================================
 const mineflayer = require('mineflayer');
 const readline = require('readline');
 const { Vec3 } = require('vec3');
@@ -20,45 +26,69 @@ const {
     goals
 } = require('mineflayer-pathfinder');
 
-const bot = mineflayer.createBot({
-    host: 'donutsmp.net',
-    port: 25565,
-    auth: 'microsoft', // Đổi thành 'offline' nếu server là crack
-    username: 'letrungvinhv2@outlook.com', // Đổi thành tên nhân vật nếu dùng 'offline'
-    version: '1.21.1',
-    profilesFolder: './'
-});
-
-bot.loadPlugin(pathfinder);
-
-bot.on('spawn', () => {
-    // Cài đặt luật di chuyển mặc định để tránh crash khi dùng pathfinder
-    const defaultMove = new Movements(bot);
-    bot.pathfinder.setMovements(defaultMove);
-
-    console.log('Bot joined!');
-});
-
-bot.on('error', console.log);
-bot.on('kicked', console.log);
+let bot; // Biến bot phải để ở ngoài để hàm lệnh có thể gọi được
+let antiAfk = null;
+let spinTask = null;
+let followTask = null;
 
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
 
-let antiAfk = null;
-let spinTask = null;
-let followTask = null;
+// ==========================================
+// 3. HÀM KHỞI TẠO BOT (CÓ AUTO-RECONNECT)
+// ==========================================
+function createMyBot() {
+    console.log('[Hệ Thống] Đang tiến hành kết nối vào server...');
+    
+    bot = mineflayer.createBot({
+        host: 'donutsmp.net',
+        port: 25565,
+        auth: 'microsoft', // Đổi thành 'offline' nếu server là crack
+        username: 'letrungvinhv2@outlook.com', // Đổi thành tên nhân vật nếu dùng 'offline'
+        version: '1.21.1',
+        profilesFolder: './' // Lưu cache đăng nhập Microsoft để khỏi đăng nhập lại
+    });
+
+    bot.loadPlugin(pathfinder);
+
+    bot.on('spawn', () => {
+        // Cài đặt luật di chuyển mặc định để tránh crash khi dùng pathfinder
+        const defaultMove = new Movements(bot);
+        bot.pathfinder.setMovements(defaultMove);
+
+        console.log('[Hệ Thống] Bot joined!');
+    });
+
+    bot.on('error', (err) => console.log('[Lỗi Bot]:', err));
+    bot.on('kicked', (reason) => console.log('[Bot bị kick]:', reason));
+
+    // CƠ CHẾ LÌ LỢM: TỰ KẾT NỐI LẠI KHI BỊ SẬP
+    bot.on('end', (reason) => {
+        console.log(`[Hệ Thống] Bot bị ngắt kết nối do: ${reason}`);
+        console.log('[Hệ Thống] Đang tự động kết nối lại sau 30 giây...');
+        
+        stopEverything(); // Dừng mọi hoạt động để tránh lỗi
+
+        setTimeout(() => {
+            createMyBot(); 
+        }, 30000); // Đợi 30 giây (30000ms) rồi chui vào lại
+    });
+}
+
+// Chạy bot lần đầu tiên
+createMyBot();
 
 // =========================
 // HELPERS (HÀM TRỢ GIÚP)
 // =========================
 
 function stopEverything() {
-    bot.clearControlStates();
-    bot.pathfinder.setGoal(null);
-    bot.stopDigging();
+    if (!bot) return;
+    try { bot.clearControlStates(); } catch(e){}
+    try { bot.pathfinder.setGoal(null); } catch(e){}
+    try { bot.stopDigging(); } catch(e){}
 
     if (antiAfk) {
         clearInterval(antiAfk);
@@ -83,6 +113,12 @@ function stopEverything() {
 // =========================
 
 rl.on('line', async (line) => {
+    // Chặn gõ lệnh nếu bot chưa kết nối xong để tránh crash code
+    if (!bot || !bot.entity) {
+        console.log('[Hệ Thống] Bot chưa online, vui lòng đợi...');
+        return;
+    }
+
     const args = line.trim().split(' ');
     const cmd = args[0];
 
@@ -464,5 +500,4 @@ Tiện ích hệ thống:
 !time | !players | !panic (Dừng khẩn cấp mọi hoạt động)
 `);
     }
-
 });
