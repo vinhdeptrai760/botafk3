@@ -37,7 +37,7 @@ const rl = readline.createInterface({
 });
 
 // ==========================================
-// 3. HÀM KHỞI TẠO BOT (CÓ AUTO-RECONNECT)
+// 3. HÀM KHỞI TẠO BOT (CÓ AUTO-RECONNECT + TỐI ƯU DONUT)
 // ==========================================
 function createMyBot() {
     console.log('[Hệ Thống] Đang tiến hành kết nối vào server...');
@@ -47,45 +47,56 @@ function createMyBot() {
         port: 25565,
         auth: 'microsoft', 
         username: 'letrungvinhv2@outlook.com', 
-        // 🛠️ FIX 1: Thử bỏ qua việc ép buộc version 1.21.1 để bot tự động tương thích với Proxy của DonutSMP
-        // version: '1.21.1', 
         profilesFolder: './auth-cache',
-        hideErrors: false // Để hiện chi tiết nếu có lỗi giao thức
+        
+        // 🛠️ SHIELD 1: Tối ưu gói tin tránh nghẽn mạch trên Render
+        viewDistance: 'tiny',       // Giảm tối đa lượng chunk tải về (giảm tải CPU Render)
+        checkTimeoutInterval: 90000, // Tăng thời gian chờ đợi gói tin lên 90 giây để tránh timeout
+        physicsEnabled: false       // Tắt vật lý ngay từ lúc cấu hình khởi tạo
     });
 
     bot.loadPlugin(pathfinder);
 
-    // 🛠️ FIX 2: TỰ ĐỘNG CHẤP NHẬN RESOURCE PACK (Quan trọng nhất với server quốc tế)
-    bot.on('resourcePack', (url, hash) => {
-        console.log('[Hệ Thống] Server yêu cầu Resource Pack, đang tự động đồng ý...');
+    // Tự động đồng ý Resource Pack nếu server ép buộc
+    bot.on('resourcePack', () => {
         bot.acceptResourcePack();
     });
 
     bot.on('spawn', () => {
-        // 🛠️ FIX 3: Trì hoãn việc cài đặt di chuyển 1 giây để tránh bị Anti-cheat quét gói tin quá sớm
+        console.log('[Hệ Thống] Đã kết nối! Đang đóng băng bot 3 giây để bypass Anti-cheat...');
+        
+        // 🛠️ SHIELD 2: Đóng băng hệ thống vật lý khi vừa vào game
+        bot.physics.enabled = false; 
+
         setTimeout(() => {
-            if (!bot || !bot.pathfinder) return;
+            if (!bot) return;
+            
+            // Sau 3 giây an toàn, mới kích hoạt lại hệ thống di chuyển
+            bot.physics.enabled = true; 
             const defaultMove = new Movements(bot);
             bot.pathfinder.setMovements(defaultMove);
-            console.log('[Hệ Thống] Bot joined và đã kích hoạt hệ thống định vị ổn định!');
-        }, 1000);
+            
+            console.log('[Hệ Thống] -> BẢO MẬT ĐẠT: Bot đã vào game an toàn và sẵn sàng nhận lệnh!');
+        }, 3500);
     });
 
+    // 🛠️ SHIELD 3: Giảm tải log lỗi trùng lặp để tránh làm nghẽn luồng xử lý của Node.js
     bot.on('error', (err) => {
-        // Giảm bớt log spam nếu là lỗi ECONNRESET cũ đang tự kết nối lại
         if (err.code === 'ECONNRESET') {
-            console.log('[Lỗi Bot]: Server chặn kết nối mạng (ECONNRESET).');
+            console.log('[Bộ Lọc] Phát hiện Server reset kết nối đột ngột (ECONNRESET). Đang xử lý...');
         } else {
-            console.log('[Lỗi Bot]:', err);
+            console.log('[Lỗi Hệ Thống]:', err.message || err);
         }
     });
     
-    bot.on('kicked', (reason) => console.log('[Bot bị kick]:', reason));
+    bot.on('kicked', (reason) => {
+        console.log('[Bot bị kick]:', JSON.stringify(reason));
+    });
 
     // CƠ CHẾ TỰ KẾT NỐI LẠI
     bot.on('end', (reason) => {
-        console.log(`[Hệ Thống] Bot bị ngắt kết nối do: ${reason}`);
-        console.log('[Hệ Thống] Đang tự động kết nối lại sau 30 giây...');
+        console.log(`[Hệ Thống] Ngắt kết nối do: ${reason}`);
+        console.log('[Hệ Thống] Sẽ tự động kết nối lại sau 30 giây...');
         
         stopEverything(); 
 
@@ -95,13 +106,12 @@ function createMyBot() {
     });
 }
 
-// Chạy bot lần đầu tiên
+// Khởi chạy hệ thống
 createMyBot();
 
 // =========================
 // HELPERS (HÀM TRỢ GIÚP)
 // =========================
-
 function stopEverything() {
     if (!bot) return;
     try { bot.clearControlStates(); } catch(e){}
@@ -116,11 +126,11 @@ function stopEverything() {
 }
 
 // =========================
-// COMMANDS (LỆNH ĐIỀU KHIỂN)
+// COMMANDS (LỆNH ĐIỀU KHIỂN VIA TERMINAL)
 // =========================
 rl.on('line', async (line) => {
-    if (!bot || !bot.entity) {
-        console.log('[Hệ Thống] Bot chưa online, vui lòng đợi...');
+    if (!bot || !bot.entity || !bot.physics.enabled) {
+        console.log('[Hệ Thống] Bot chưa hoàn thành bypass bảo mật, vui lòng đợi vài giây...');
         return;
     }
 
@@ -220,58 +230,13 @@ rl.on('line', async (line) => {
     else if (cmd === '!players') console.log(Object.keys(bot.players));
     else if (cmd === '!panic') stopEverything();
 
-    // CHỨC NĂNG TƯƠNG TÁC
-    else if (cmd === '!swing') {
-        bot.swingArm();
-        console.log('Swung arm (Left click)');
-    }
-    else if (cmd === '!use') {
-        bot.activateItem();
-        console.log('Used held item (Right click)');
-    }
-    else if (cmd === '!click') {
-        const block = bot.blockAtCursor(5); 
-        if (block) {
-            try {
-                await bot.activateBlock(block);
-                console.log(`Đã tương tác với: ${block.name}`);
-            } catch (err) {
-                console.log(`Không thể tương tác:`, err.message);
-            }
-        }
-    }
-    else if (cmd === '!lever') {
-        const lever = bot.findBlock({ matching: block => block.name === 'lever', maxDistance: 5 });
-        if (lever) {
-            try { await bot.activateBlock(lever); console.log('Đã gạt cần!'); } catch (err) {}
-        }
-    }
-    else if (cmd === '!attack') {
-        const target = bot.nearestEntity(e => e.type === 'player' || e.type === 'hostile' || e.type === 'mob');
-        if (target) { bot.attack(target); console.log('Attacked target'); }
-    }
-    else if (cmd === '!dig') {
-        const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
-        const block = bot.blockAt(new Vec3(x, y, z));
-        if (block && bot.canDigBlock(block)) {
-            try { await bot.dig(block); console.log('Finished digging!'); } catch (err) {}
-        }
-    }
-    else if (cmd === '!stopdig') bot.stopDigging();
-    else if (cmd === '!inv') {
-        const items = bot.inventory.items();
-        items.forEach(item => console.log(`- ${item.count}x ${item.name}`));
-    }
-    else if (cmd === '!slot') {
-        const slot = parseInt(args[1]);
-        if (slot >= 0 && slot <= 8) bot.setQuickBarSlot(slot);
-    }
+    // TƯƠNG TÁC KHÁC
+    else if (cmd === '!swing') { bot.swingArm(); console.log('Left click'); }
+    else if (cmd === '!use') { bot.activateItem(); console.log('Right click'); }
     else if (cmd === '!hp') {
         console.log(`Health: ${bot.health.toFixed(1)}/20 | Food: ${bot.food}/20`);
     }
-
-    // HELP MENU
     else if (cmd === '!help') {
-        console.log(`\n=== DANH SÁCH LỆNH ===\n!pos | !goto | !follow | !unfollow | !stop\n!swing | !use | !click | !lever | !attack | !dig\n!inv | !slot | !hp | !antiafk | !spin\n`);
+        console.log(`\n=== DANH SÁCH LỆNH ===\n!pos | !goto | !follow | !unfollow | !stop\n!swing | !use | !hp | !antiafk | !spin\n`);
     }
 });
