@@ -26,7 +26,7 @@ const {
     goals
 } = require('mineflayer-pathfinder');
 
-let bot; // Biến bot phải để ở ngoài để hàm lệnh có thể gọi được
+let bot; 
 let antiAfk = null;
 let spinTask = null;
 let followTask = null;
@@ -45,35 +45,53 @@ function createMyBot() {
     bot = mineflayer.createBot({
         host: 'donutsmp.net',
         port: 25565,
-        auth: 'microsoft', // Đổi thành 'offline' nếu server là crack
-        username: 'letrungvinhv2@outlook.com', // Đổi thành tên nhân vật nếu dùng 'offline'
-        version: '1.21.1',
-        profilesFolder: './auth-cache' // Lưu cache đăng nhập Microsoft để khỏi đăng nhập lại
+        auth: 'microsoft', 
+        username: 'letrungvinhv2@outlook.com', 
+        // 🛠️ FIX 1: Thử bỏ qua việc ép buộc version 1.21.1 để bot tự động tương thích với Proxy của DonutSMP
+        // version: '1.21.1', 
+        profilesFolder: './auth-cache',
+        hideErrors: false // Để hiện chi tiết nếu có lỗi giao thức
     });
 
     bot.loadPlugin(pathfinder);
 
-    bot.on('spawn', () => {
-        // Cài đặt luật di chuyển mặc định để tránh crash khi dùng pathfinder
-        const defaultMove = new Movements(bot);
-        bot.pathfinder.setMovements(defaultMove);
-
-        console.log('[Hệ Thống] Bot joined!');
+    // 🛠️ FIX 2: TỰ ĐỘNG CHẤP NHẬN RESOURCE PACK (Quan trọng nhất với server quốc tế)
+    bot.on('resourcePack', (url, hash) => {
+        console.log('[Hệ Thống] Server yêu cầu Resource Pack, đang tự động đồng ý...');
+        bot.acceptResourcePack();
     });
 
-    bot.on('error', (err) => console.log('[Lỗi Bot]:', err));
+    bot.on('spawn', () => {
+        // 🛠️ FIX 3: Trì hoãn việc cài đặt di chuyển 1 giây để tránh bị Anti-cheat quét gói tin quá sớm
+        setTimeout(() => {
+            if (!bot || !bot.pathfinder) return;
+            const defaultMove = new Movements(bot);
+            bot.pathfinder.setMovements(defaultMove);
+            console.log('[Hệ Thống] Bot joined và đã kích hoạt hệ thống định vị ổn định!');
+        }, 1000);
+    });
+
+    bot.on('error', (err) => {
+        // Giảm bớt log spam nếu là lỗi ECONNRESET cũ đang tự kết nối lại
+        if (err.code === 'ECONNRESET') {
+            console.log('[Lỗi Bot]: Server chặn kết nối mạng (ECONNRESET).');
+        } else {
+            console.log('[Lỗi Bot]:', err);
+        }
+    });
+    
     bot.on('kicked', (reason) => console.log('[Bot bị kick]:', reason));
 
-    // CƠ CHẾ LÌ LỢM: TỰ KẾT NỐI LẠI KHI BỊ SẬP
+    // CƠ CHẾ TỰ KẾT NỐI LẠI
     bot.on('end', (reason) => {
         console.log(`[Hệ Thống] Bot bị ngắt kết nối do: ${reason}`);
         console.log('[Hệ Thống] Đang tự động kết nối lại sau 30 giây...');
         
-        stopEverything(); // Dừng mọi hoạt động để tránh lỗi
+        stopEverything(); 
 
         setTimeout(() => {
             createMyBot(); 
-        }, 30000); // Đợi 30 giây (30000ms) rồi chui vào lại
+        }, 30000); 
     });
 }
 
@@ -90,20 +108,9 @@ function stopEverything() {
     try { bot.pathfinder.setGoal(null); } catch(e){}
     try { bot.stopDigging(); } catch(e){}
 
-    if (antiAfk) {
-        clearInterval(antiAfk);
-        antiAfk = null;
-    }
-
-    if (spinTask) {
-        clearInterval(spinTask);
-        spinTask = null;
-    }
-
-    if (followTask) {
-        clearInterval(followTask);
-        followTask = null;
-    }
+    if (antiAfk) { clearInterval(antiAfk); antiAfk = null; }
+    if (spinTask) { clearInterval(spinTask); spinTask = null; }
+    if (followTask) { clearInterval(followTask); followTask = null; }
 
     console.log('Stopped all tasks.');
 }
@@ -111,9 +118,7 @@ function stopEverything() {
 // =========================
 // COMMANDS (LỆNH ĐIỀU KHIỂN)
 // =========================
-
 rl.on('line', async (line) => {
-    // Chặn gõ lệnh nếu bot chưa kết nối xong để tránh crash code
     if (!bot || !bot.entity) {
         console.log('[Hệ Thống] Bot chưa online, vui lòng đợi...');
         return;
@@ -121,10 +126,6 @@ rl.on('line', async (line) => {
 
     const args = line.trim().split(' ');
     const cmd = args[0];
-
-    // ==========================================
-    // CHỨC NĂNG CŨ
-    // ==========================================
 
     if (cmd === '!say') {
         bot.chat(args.slice(1).join(' '));
@@ -219,285 +220,58 @@ rl.on('line', async (line) => {
     else if (cmd === '!players') console.log(Object.keys(bot.players));
     else if (cmd === '!panic') stopEverything();
 
-    // ==========================================
-    // CHỨC NĂNG MỚI
-    // ==========================================
-
-    // 1. CHUỘT TRÁI (Vung tay)
+    // CHỨC NĂNG TƯƠNG TÁC
     else if (cmd === '!swing') {
         bot.swingArm();
         console.log('Swung arm (Left click)');
     }
-
-    // 2. CHUỘT PHẢI (Dùng item đang cầm trên tay)
     else if (cmd === '!use') {
         bot.activateItem();
         console.log('Used held item (Right click)');
     }
-
-    // 3. TƯƠNG TÁC CON TRỎ (Bấm vào khối đang nhìn thẳng)
     else if (cmd === '!click') {
         const block = bot.blockAtCursor(5); 
         if (block) {
             try {
                 await bot.activateBlock(block);
-                console.log(`Đã chuột phải (tương tác) vào: ${block.name}`);
+                console.log(`Đã tương tác với: ${block.name}`);
             } catch (err) {
-                console.log(`Không thể tương tác với ${block.name}:`, err.message);
+                console.log(`Không thể tương tác:`, err.message);
             }
-        } else {
-            console.log('Bot không nhìn thấy block nào ở gần để bấm!');
         }
     }
-
-    // 4. TỰ ĐỘNG TÌM VÀ GẠT CẦN (Sửa lỗi bấm hụt đèn đá đỏ)
     else if (cmd === '!lever') {
-        const lever = bot.findBlock({
-            matching: block => block.name === 'lever',
-            maxDistance: 5
-        });
-
+        const lever = bot.findBlock({ matching: block => block.name === 'lever', maxDistance: 5 });
         if (lever) {
-            try {
-                await bot.activateBlock(lever);
-                console.log(`Đã gạt cần (lever) tại tọa độ: ${lever.position.x}, ${lever.position.y}, ${lever.position.z}`);
-            } catch (err) {
-                console.log('Không thể gạt cần:', err.message);
-            }
-        } else {
-            console.log('Không tìm thấy cần gạt (lever) nào trong bán kính 5 block!');
+            try { await bot.activateBlock(lever); console.log('Đã gạt cần!'); } catch (err) {}
         }
     }
-
-    // 5. ĐẤM / TẤN CÔNG
     else if (cmd === '!attack') {
-        const playerName = args[1];
-        let target;
-        if (playerName) {
-            target = bot.players[playerName] ? bot.players[playerName].entity : null;
-        } else {
-            target = bot.nearestEntity(e => e.type === 'player' || e.type === 'hostile' || e.type === 'mob');
-        }
-        
-        if (target) {
-            bot.attack(target);
-            console.log(`Attacked ${target.username || target.name}`);
-        } else {
-            console.log('No valid target to attack nearby');
-        }
+        const target = bot.nearestEntity(e => e.type === 'player' || e.type === 'hostile' || e.type === 'mob');
+        if (target) { bot.attack(target); console.log('Attacked target'); }
     }
-
-    // 6. ĐÀO BLOCK
     else if (cmd === '!dig') {
-        const x = parseInt(args[1]);
-        const y = parseInt(args[2]);
-        const z = parseInt(args[3]);
-        if (isNaN(x) || isNaN(y) || isNaN(z)) return console.log('Usage: !dig x y z');
-        
+        const x = parseInt(args[1]), y = parseInt(args[2]), z = parseInt(args[3]);
         const block = bot.blockAt(new Vec3(x, y, z));
         if (block && bot.canDigBlock(block)) {
-            console.log(`Digging ${block.name}...`);
-            try {
-                await bot.dig(block);
-                console.log('Finished digging!');
-            } catch (err) {
-                console.log('Failed to dig:', err.message);
-            }
-        } else {
-            console.log('Cannot dig block at that position.');
+            try { await bot.dig(block); console.log('Finished digging!'); } catch (err) {}
         }
     }
-
-    // 7. NGỪNG ĐÀO
-    else if (cmd === '!stopdig') {
-        bot.stopDigging();
-        console.log('Stopped digging.');
-    }
-
-    // 8. XEM TÚI ĐỒ
+    else if (cmd === '!stopdig') bot.stopDigging();
     else if (cmd === '!inv') {
         const items = bot.inventory.items();
-        if (items.length === 0) {
-            console.log('Inventory is empty');
-        } else {
-            console.log('Inventory:');
-            items.forEach(item => console.log(`- ${item.count}x ${item.name}`));
-        }
+        items.forEach(item => console.log(`- ${item.count}x ${item.name}`));
     }
-
-    // 9. CHỌN SLOT HOTBAR
     else if (cmd === '!slot') {
         const slot = parseInt(args[1]);
-        if (slot >= 0 && slot <= 8) {
-            bot.setQuickBarSlot(slot);
-            console.log(`Switched to hotbar slot ${slot}`);
-        } else {
-            console.log('Slot must be between 0 and 8');
-        }
+        if (slot >= 0 && slot <= 8) bot.setQuickBarSlot(slot);
     }
-
-    // 10. CẦM ITEM LÊN TAY
-    else if (cmd === '!equip') {
-        const itemName = args[1];
-        const item = bot.inventory.items().find(i => i.name.includes(itemName));
-        if (item) {
-            try {
-                await bot.equip(item, 'hand');
-                console.log(`Equipped ${item.name}`);
-            } catch (err) {
-                console.log('Cannot equip item:', err.message);
-            }
-        } else {
-            console.log(`Item ${itemName} not found in inventory.`);
-        }
-    }
-
-    // 11. BỎ ITEM XUỐNG
-    else if (cmd === '!unequip') {
-        try {
-            await bot.unequip('hand');
-            console.log('Unequipped item');
-        } catch (err) {
-            console.log('Cannot unequip:', err.message);
-        }
-    }
-
-    // 12. VỨT ITEM
-    else if (cmd === '!toss') {
-        const itemName = args[1];
-        const amount = parseInt(args[2]) || 1;
-        const item = bot.inventory.items().find(i => i.name.includes(itemName));
-        if (item) {
-            try {
-                await bot.toss(item.type, null, amount);
-                console.log(`Tossed ${amount}x ${item.name}`);
-            } catch (err) {
-                console.log('Failed to toss:', err.message);
-            }
-        } else {
-            console.log('Item not found to toss.');
-        }
-    }
-
-    // 13. VỨT HẾT ĐỒ
-    else if (cmd === '!tossall') {
-        const items = bot.inventory.items();
-        for (const item of items) {
-            await bot.tossStack(item);
-        }
-        console.log('Tossed all items.');
-    }
-
-    // 14. ĂN UỐNG
-    else if (cmd === '!eat') {
-        try {
-            await bot.consume();
-            console.log('Ate held item.');
-        } catch (err) {
-            console.log('Cannot eat this item:', err.message);
-        }
-    }
-
-    // 15. XEM MÁU VÀ ĐỘ ĐÓI
     else if (cmd === '!hp') {
         console.log(`Health: ${bot.health.toFixed(1)}/20 | Food: ${bot.food}/20`);
     }
 
-    // 16. XEM CẤP ĐỘ KINH NGHIỆM
-    else if (cmd === '!xp') {
-        console.log(`Level: ${bot.experience.level} | Progress: ${(bot.experience.progress * 100).toFixed(1)}%`);
-    }
-
-    // 17. NGỦ
-    else if (cmd === '!sleep') {
-        const bed = bot.findBlock({ matching: block => bot.isABed(block) });
-        if (bed) {
-            try {
-                await bot.sleep(bed);
-                console.log('Sleeping...');
-            } catch (err) {
-                console.log('Cannot sleep:', err.message);
-            }
-        } else {
-            console.log('No bed found nearby.');
-        }
-    }
-
-    // 18. THỨC DẬY
-    else if (cmd === '!wakeup') {
-        try {
-            await bot.wake();
-            console.log('Woke up.');
-        } catch (err) {
-            console.log('Not sleeping.', err.message);
-        }
-    }
-
-    // 19. LÊN XE / CƯỠI THÚ
-    else if (cmd === '!mount') {
-        const vehicle = bot.nearestEntity((entity) => ['boat', 'minecart', 'horse', 'pig', 'donkey'].includes(entity.name));
-        if (vehicle) {
-            bot.mount(vehicle);
-            console.log('Mounted ' + vehicle.name);
-        } else {
-            console.log('No mountable entity nearby.');
-        }
-    }
-
-    // 20. XUỐNG XE
-    else if (cmd === '!dismount') {
-        bot.dismount();
-        console.log('Dismounted.');
-    }
-
-    // 21. KIỂM TRA THỜI GIAN
-    else if (cmd === '!time') {
-        console.log(`Time of day: ${bot.time.timeOfDay} ticks`);
-    }
-
-    // 22. XEM THÔNG TIN BLOCK
-    else if (cmd === '!block') {
-        const x = parseInt(args[1]);
-        const y = parseInt(args[2]);
-        const z = parseInt(args[3]);
-        if (isNaN(x) || isNaN(y) || isNaN(z)) return console.log('Usage: !block x y z');
-        
-        const block = bot.blockAt(new Vec3(x, y, z));
-        if (block) {
-            console.log(`Block at ${x}, ${y}, ${z} is: ${block.name}`);
-        } else {
-            console.log('Block not loaded.');
-        }
-    }
-
     // HELP MENU
     else if (cmd === '!help') {
-        console.log(`
-=== DANH SÁCH LỆNH ===
-Di chuyển & Định vị:
-!pos | !goto <x> <y> <z> | !look <player> | !lookpos <x> <y> <z>
-!follow <player> | !unfollow | !forward | !back | !left | !right
-!jump | !sneak | !sprint | !stop
-
-Tương tác Máy Farm & Cơ chế:
-!swing (Vung tay)
-!use (Dùng item trên tay)
-!lever (Tự quét tìm và gạt CẦN GẠT gần nhất)
-!click (Nhấn chuột phải vào block đang ngắm tâm)
-!attack [player] (Tấn công mục tiêu gần nhất)
-!dig <x> <y> <z> (Đào block) | !stopdig
-!block <x> <y> <z> (Xem thông tin block)
-
-Túi đồ & Trạng thái:
-!inv | !slot <0-8> | !equip <itemName> | !unequip
-!toss <itemName> [số lượng] | !tossall
-!eat | !hp | !xp
-
-Tiện ích hệ thống:
-!say <text> | !command <cmd>
-!antiafk | !stopafk | !spin | !stopspin
-!sleep | !wakeup | !mount | !dismount
-!time | !players | !panic (Dừng khẩn cấp mọi hoạt động)
-`);
+        console.log(`\n=== DANH SÁCH LỆNH ===\n!pos | !goto | !follow | !unfollow | !stop\n!swing | !use | !click | !lever | !attack | !dig\n!inv | !slot | !hp | !antiafk | !spin\n`);
     }
 });
