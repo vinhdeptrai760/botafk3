@@ -1,11 +1,11 @@
 // ==========================================
-// 1. WEB SERVER ẢO (GIỮ ONLINE NẾU CẦN)
+// 1. WEB SERVER ẢO (GIỮ ONLINE)
 // ==========================================
 const express = require('express');
 const app = express();
 
 app.get('/', (req, res) => {
-    res.send('Bot Mineflayer đang AFK 24/7!');
+    res.send('Bot NPC cắm chốt siêu lì đang online 24/7!');
 });
 
 const port = process.env.PORT || 3000;
@@ -27,7 +27,7 @@ const {
 } = require('mineflayer-pathfinder');
 
 let bot; 
-let antiAfk = null;
+let antiAfkTask = null;
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -35,13 +35,13 @@ const rl = readline.createInterface({
 });
 
 // ==========================================
-// 3. HÀM KHỞI TẠO BOT (CÓ AUTO-RECONNECT)
+// 3. HÀM KHỞI TẠO BOT (CHỐNG TIMEOUT TUYỆT ĐỐI)
 // ==========================================
 function createMyBot() {
     console.log('[Hệ Thống] Đang tiến hành kết nối vào server...');
     
     bot = mineflayer.createBot({
-        host: 'donutsmp.net', // Hoặc 'kingmc.vn' tùy bạn đổi nhé
+        host: 'donutsmp.net', 
         port: 25565,
         auth: 'microsoft', 
         username: 'letrungvinhv2@outlook.com', 
@@ -50,8 +50,12 @@ function createMyBot() {
         brand: 'vanilla',            
         version: '1.21.1',           
         viewDistance: 'tiny',       
-        checkTimeoutInterval: 90000, 
-        physicsEnabled: false       
+        physicsEnabled: false, // Đứng im như tượng, không rơi, không bị đẩy
+
+        // 🛠️ ĐÂY LÀ ĐOẠN KHẮC TINH CỦA LỖI TIMEOUT:
+        // Tăng thời gian chờ gói tin lên hẳn 24 tiếng (86400000 ms) thay vì 90 giây cũ!
+        // Server có lag, có nghẽn mạch, bot vẫn sẽ lì lợm đứng đợi chứ không tự ý out game nữa.
+        checkTimeoutInterval: 86400000 
     });
 
     bot.loadPlugin(pathfinder);
@@ -61,28 +65,20 @@ function createMyBot() {
     });
 
     bot.on('spawn', () => {
-        console.log('[Hệ Thống] Đã kết nối! Đang đóng băng bot 3 giây để bypass Anti-cheat...');
-        
+        console.log('[Hệ Thống] Đã kết nối vào khu farm!');
         bot.physics.enabled = false; 
 
         setTimeout(() => {
             if (!bot) return;
-            
-            bot.physics.enabled = true; 
-            const defaultMove = new Movements(bot);
-            bot.pathfinder.setMovements(defaultMove);
-            
-            console.log('[Hệ Thống] Bot đã vào game an toàn và sẵn sàng AFK!');
-
-            // Kích hoạt tính năng nhảy nhảy chống AFK của server
-            startAntiAfk();
-
+            console.log('[Hệ Thống] Bot đã bám rễ tại chỗ thành công.');
+            startSilentAntiAfk();
         }, 3500);
     });
 
+    // Bỏ qua các log lỗi vặt khi mạng lag để tránh làm tràn luồng xử lý
     bot.on('error', (err) => {
-        if (err.code === 'ECONNRESET') {
-            console.log('[Bộ Lọc] Phát hiện Server reset kết nối đột ngột (ECONNRESET).');
+        if (err.code === 'ECONNRESET' || err.message.includes('timeout')) {
+            console.log('[Bộ Lọc] Server đang giật lag / nghẽn mạng nhẹ. Bot vẫn đang gồng giữ kết nối...');
         } else {
             console.log('[Lỗi Hệ Thống]:', err.message || err);
         }
@@ -90,9 +86,9 @@ function createMyBot() {
     
     bot.on('kicked', (reason) => console.log('[Bot bị kick]:', JSON.stringify(reason)));
 
-    // CƠ CHẾ TỰ KẾT NỐI LẠI KHI SẬP SERVER
+    // CHỈ KHI NÀO SERVER SẬP HOÀN TOÀN (RESTART) THÌ MỚI VÀO LẠI
     bot.on('end', (reason) => {
-        console.log(`[Hệ Thống] Ngắt kết nối do: ${reason}`);
+        console.log(`[Hệ Thống] Rời server do: ${reason}`);
         console.log('[Hệ Thống] Sẽ tự động kết nối lại sau 30 giây...');
         
         stopEverything(); 
@@ -103,30 +99,24 @@ function createMyBot() {
     });
 }
 
-// Khởi chạy hệ thống
 createMyBot();
 
 // ==========================================
-// 🛠️ CHỨC NĂNG CHỐNG KICK AFK CỦA SERVER
+// CHỐNG KICK ẨN (GỬI LỆNH REFRESH TÀNG HÌNH)
 // ==========================================
-function startAntiAfk() {
-    if (antiAfk) clearInterval(antiAfk);
+function startSilentAntiAfk() {
+    if (antiAfkTask) clearInterval(antiAfkTask);
     
-    // Cứ mỗi 30 giây bot sẽ nhảy một cái nhẹ và quay người ngẫu nhiên để server không kick
-    antiAfk = setInterval(() => {
+    // Cứ mỗi 45 giây, gửi lệnh ẩn /ping lên hệ thống để thông báo bot còn sống
+    // Cơ thể bot đứng im 100% không làm xáo trộn khu farm của bạn
+    antiAfkTask = setInterval(() => {
         if (!bot || !bot.entity) return;
-        bot.setControlState('jump', true);
-        setTimeout(() => bot.setControlState('jump', false), 300);
-        
-        const yaw = bot.entity.yaw + (Math.random() - 0.5);
-        bot.look(yaw, bot.entity.pitch, true);
-    }, 30000);
-    console.log('[Anti AFK] Đã bật tự động chống kick AFK.');
+        bot.chat('/ping'); 
+    }, 45000);
 }
 
 function stopEverything() {
     if (!bot) return;
-    try { bot.clearControlStates(); } catch(e){}
-    if (antiAfk) { clearInterval(antiAfk); antiAfk = null; }
+    if (antiAfkTask) { clearInterval(antiAfkTask); antiAfkTask = null; }
     console.log('Stopped all tasks.');
 }
