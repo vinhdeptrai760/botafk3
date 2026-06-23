@@ -10,7 +10,7 @@ function createMyBot() {
         host: 'donutsmp.net', 
         port: 25565,
         auth: 'microsoft', 
-        username: 'haovietdthw123@outlook.com', // Nhớ đổi đúng email cho từng con bot
+        username: 'letrungvinhv2@outlook.com', // Nhớ đổi đúng email cho từng con bot
         profilesFolder: './auth-cache',
         version: '1.21.1',
         
